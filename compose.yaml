@@ -1,0 +1,51 @@
+include:
+  - proxy.yaml
+
+services:
+  web:
+    image: cr.yandex/crphjbnatof9pq866aon/app:latest
+    restart: always
+    networks:
+      backend:
+        ipv4_address: 172.20.0.5
+    env_file:
+      - .env
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      MYSQL_HOST: db
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+
+  db:
+    image: mysql:8
+    restart: always
+    networks:
+      backend:
+        ipv4_address: 172.20.0.10
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ingress-proxy:
+    command: >
+      sh -c "
+        echo 'server { listen 8090; location / { proxy_pass http://127.0.0.1:8080; proxy_set_header Host $$host; proxy_set_header X-Real-IP $$remote_addr; } }'
+        > /etc/nginx/conf.d/8090.conf &&
+        nginx -g 'daemon off;'
+      "
+    depends_on:
+      - web
+
+networks:
+  backend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
